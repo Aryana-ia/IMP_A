@@ -4,8 +4,8 @@ Aplicación Streamlit para cargar y procesar información ACEVAL en varias etapa
 
 ## Estructura
 
-- `dashboard_aceval_streamlit.py`: Aplicación principal Streamlit. Interfaz por etapas.
-- `aceval_refactor.py`: Lógica de negocio y helpers. Adaptado para interacción con Streamlit.
+- `carga_datos.py`: Aplicación principal Streamlit. Interfaz por etapas.
+- `refactory.py`: Lógica de negocio y helpers. Adaptado para interacción con Streamlit.
 - `requirements.txt`: Dependencias para instalar.
 - `README.md`: Documentación y guía de uso.
 
@@ -17,7 +17,7 @@ Aplicación Streamlit para cargar y procesar información ACEVAL en varias etapa
    ```
 2. Ejecuta la app:
    ```
-   streamlit run dashboard_aceval_streamlit.py
+   streamlit run carga_datos.py
    ```
 3. Ve completando cada etapa en la interfaz web.
 
