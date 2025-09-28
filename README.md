@@ -1,18 +1,28 @@
-# Dashboard Aceval Streamlit
+# IMP_ACEVAL Streamlit Dashboard
 
-Dashboard interactivo para visualizar datos de importaciones por etapas, proveedores, productos, categorías y fechas.
+Aplicación Streamlit para cargar y procesar información ACEVAL en varias etapas, respetando todas las reglas y validaciones del flujo original.
 
-## Uso en Streamlit Cloud
+## Estructura
 
-1. Suba sus archivos Excel a las carpetas `I_ETAPA`, `II_ETAPA`, `III_ETAPA`, `IV_ETAPA` dentro del repositorio.
-2. El dashboard permite filtrar y visualizar métricas por proveedor, producto, categoría y fecha.
-3. ¡Comparta el link de Streamlit Cloud con quien desee!
+- `dashboard_aceval_streamlit.py`: Aplicación principal Streamlit. Interfaz por etapas.
+- `aceval_refactor.py`: Lógica de negocio y helpers. Adaptado para interacción con Streamlit.
+- `requirements.txt`: Dependencias para instalar.
+- `README.md`: Documentación y guía de uso.
 
-## Requisitos
+## Uso rápido
 
-- Streamlit Cloud instala automáticamente las dependencias del archivo `requirements.txt`.
-- Los archivos Excel deben tener las columnas esperadas: Proveedor, Producto, Categoria/Categoría, Fecha, Métricas numéricas.
+1. Instala dependencias:
+   ```
+   pip install -r requirements.txt
+   ```
+2. Ejecuta la app:
+   ```
+   streamlit run dashboard_aceval_streamlit.py
+   ```
+3. Ve completando cada etapa en la interfaz web.
 
-## Actualización de datos
+## Notas
 
-Para que los cambios en los archivos se reflejen en el dashboard, actualice los archivos Excel en el repositorio y recargue la app en Streamlit Cloud.
+- La lógica de cada etapa está separada y puede adaptarse para mayor interacción.
+- El sistema respeta todas las validaciones de tu flujo original.
+- Puedes editar y mejorar los formularios de cada etapa para mayor comodidad.
