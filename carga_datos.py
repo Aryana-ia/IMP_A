@@ -29,11 +29,6 @@ def get_default_base_dir() -> str:
 
 
 def get_base_dirs(base_dir: str) -> Dict[str, Path]:
-    """
-    Construye las rutas por etapa respetando variables de entorno específicas si existen.
-    - ACEVAL_DIR_I, ACEVAL_DIR_II, ACEVAL_DIR_III, ACEVAL_DIR_IV sobrescriben por etapa.
-    - Si no existen, se usa base_dir/I_ETAPA, etc.
-    """
     env_i = os.getenv("ACEVAL_DIR_I")
     env_ii = os.getenv("ACEVAL_DIR_II")
     env_iii = os.getenv("ACEVAL_DIR_III")
@@ -153,7 +148,6 @@ def rutas_config_ui():
                 'III': Path(ruta_iii),
                 'IV': Path(ruta_iv),
             }
-            # Crea directorios
             for p in ss['rutas_salvado'].values():
                 Path(p).mkdir(parents=True, exist_ok=True)
             st.success("Rutas personalizadas aplicadas.")
