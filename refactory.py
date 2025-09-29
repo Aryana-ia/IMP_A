@@ -2,7 +2,7 @@ import logging
 import re
 from io import BytesIO
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 
 import pandas as pd
 
@@ -94,7 +94,11 @@ def df_to_excel_bytes(df: pd.DataFrame) -> bytes:
     return output.getvalue()
 
 
-def guardar_excel(df: pd.DataFrame, nombre_archivo: str, ruta_destino: str | Path):
+def guardar_excel(df: pd.DataFrame, nombre_archivo: str, ruta_destino: str | Path) -> Path:
+    """
+    Guarda el DataFrame en la ruta de etapa indicada.
+    Devuelve la ruta completa del archivo guardado.
+    """
     df = format_numeric_columns(df.copy())
     ruta_destino = Path(ruta_destino)
     ruta_destino.mkdir(parents=True, exist_ok=True)
@@ -102,6 +106,7 @@ def guardar_excel(df: pd.DataFrame, nombre_archivo: str, ruta_destino: str | Pat
     try:
         df.to_excel(ruta_completa, index=False)
         logger.info("Archivo guardado en: %s", ruta_completa)
+        return ruta_completa
     except Exception as e:
         raise IOError(f"No se pudo guardar el archivo {ruta_completa}: {e}")
 
@@ -408,20 +413,20 @@ def etapa_i_streamlit(
     cantidad_productos: Optional[int],
     origen_info: Optional[str],
     rutas_salvado: Dict[str, Path]
-) -> List[Dict]:
+) -> Tuple[List[Dict], Path]:
     items = build_items_from_df(
         df_excel, proveedor, empresa, factura, contrato, estatus,
         numero_pedido, compra_puntual, vice, cantidad_productos, origen_info
     )
     df_out = pd.DataFrame(items)
     nombre_archivo = f"ETAPA_I_{factura}_{proveedor}.xlsx"
-    guardar_excel(df_out, nombre_archivo, rutas_salvado['I'])
-    return items
+    saved_path = guardar_excel(df_out, nombre_archivo, rutas_salvado['I'])
+    return items, saved_path
 
 
 def etapa_ii_streamlit(items: List[Dict], proveedor: str, factura: str, rutas_salvado: Dict[str, Path],
                        fecha_pago: str, tasa_bcv: float, monto_planilla_tn: float, monto_planilla_seniat: float,
-                       monto_celsam: Optional[float]) -> List[Dict]:
+                       monto_celsam: Optional[float]) -> Tuple[List[Dict], Path]:
     for item in items:
         total_usd = to_float(item.get('Total USD Proveedor'), 0.0)
         item['Bancarizacion'] = round(total_usd * 0.03, 2)
@@ -457,14 +462,17 @@ def etapa_ii_streamlit(items: List[Dict], proveedor: str, factura: str, rutas_sa
     items = [format_item_numbers(it) for it in items]
     df = pd.DataFrame(items)
     nombre_archivo = f"ETAPA_II_{factura}_{proveedor}.xlsx"
-    guardar_excel(df, nombre_archivo, rutas_salvado['II'])
-    return items
+    saved_path = guardar_excel(df, nombre_archivo, rutas_salvado['II'])
+    return items, saved_path
 
 
 def etapa_iii_streamlit(items: List[Dict], factura: str, proveedor: str, rutas_salvado: Dict[str, Path],
-                        fecha_recepcion: str, df_recibidos: pd.DataFrame, cantidad_gandolas: int) -> List[Dict]:
+                        fecha_recepcion: str, df_recibidos: pd.DataFrame, cantidad_gandolas: int) -> Tuple[List[Dict], Path]:
     if not items:
-        return items
+        nombre_archivo = f"ETAPA_III_{factura}_{proveedor}.xlsx"
+        empty_path = guardar_excel(pd.DataFrame(
+            []), nombre_archivo, rutas_salvado['III'])
+        return items, empty_path
     kilos_total = 0.0
     prod_to_row = {str(r['Producto']).strip(): r for _,
                    r in df_recibidos.iterrows()}
@@ -506,13 +514,16 @@ def etapa_iii_streamlit(items: List[Dict], factura: str, proveedor: str, rutas_s
     items = [format_item_numbers(it) for it in items]
     df = pd.DataFrame(items)
     nombre_archivo = f"ETAPA_III_{factura}_{proveedor}.xlsx"
-    guardar_excel(df, nombre_archivo, rutas_salvado['III'])
-    return items
+    saved_path = guardar_excel(df, nombre_archivo, rutas_salvado['III'])
+    return items, saved_path
 
 
-def etapa_iv_streamlit(items: List[Dict], factura: str, proveedor: str, rutas_salvado: Dict[str, Path]) -> List[Dict]:
+def etapa_iv_streamlit(items: List[Dict], factura: str, proveedor: str, rutas_salvado: Dict[str, Path]) -> Tuple[List[Dict], Path]:
     if not items:
-        return items
+        nombre_archivo = f"IV_ETAPA_{factura}_{proveedor}.xlsx"
+        empty_path = guardar_excel(pd.DataFrame(
+            []), nombre_archivo, rutas_salvado['IV'])
+        return items, empty_path
     for item in items:
         suma_costos = 0.0
         campos = ['Total USD Proveedor', 'Bancarizacion', 'CELSAM', 'Planilla TN', 'Planilla SENIAT',
@@ -562,5 +573,5 @@ def etapa_iv_streamlit(items: List[Dict], factura: str, proveedor: str, rutas_sa
     items = [format_item_numbers(it) for it in items]
     df = pd.DataFrame(items)
     nombre_archivo = f"IV_ETAPA_{factura}_{proveedor}.xlsx"
-    guardar_excel(df, nombre_archivo, rutas_salvado['IV'])
-    return items
+    saved_path = guardar_excel(df, nombre_archivo, rutas_salvado['IV'])
+    return items, saved_path

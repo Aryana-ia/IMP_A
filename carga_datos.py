@@ -1,6 +1,8 @@
 import os
+import platform
 from io import BytesIO
 from pathlib import Path
+from typing import Dict
 
 import pandas as pd
 import streamlit as st
@@ -15,14 +17,35 @@ from refactory import (
 st.set_page_config(page_title="ACEVAL - Carga de Datos", layout="wide")
 
 
-def get_base_dirs(base_dir: str):
+def env_or(default_key: str, fallback: str) -> str:
+    v = os.getenv(default_key)
+    return v if v else fallback
+
+
+def get_default_base_dir() -> str:
+    if platform.system() == "Windows":
+        return env_or("ACEVAL_BASE_DIR", "C:/Users/arian/Desktop/IMP_ACEVAL")
+    return env_or("ACEVAL_BASE_DIR", "./outputs")
+
+
+def get_base_dirs(base_dir: str) -> Dict[str, Path]:
+    """
+    Construye las rutas por etapa respetando variables de entorno específicas si existen.
+    - ACEVAL_DIR_I, ACEVAL_DIR_II, ACEVAL_DIR_III, ACEVAL_DIR_IV sobrescriben por etapa.
+    - Si no existen, se usa base_dir/I_ETAPA, etc.
+    """
+    env_i = os.getenv("ACEVAL_DIR_I")
+    env_ii = os.getenv("ACEVAL_DIR_II")
+    env_iii = os.getenv("ACEVAL_DIR_III")
+    env_iv = os.getenv("ACEVAL_DIR_IV")
     base = Path(base_dir)
-    return {
-        'I': base / "I_ETAPA",
-        'II': base / "II_ETAPA",
-        'III': base / "III_ETAPA",
-        'IV': base / "IV_ETAPA",
+    rutas = {
+        'I': Path(env_i) if env_i else base / "I_ETAPA",
+        'II': Path(env_ii) if env_ii else base / "II_ETAPA",
+        'III': Path(env_iii) if env_iii else base / "III_ETAPA",
+        'IV': Path(env_iv) if env_iv else base / "IV_ETAPA",
     }
+    return rutas
 
 
 def to_download_bytes(df: pd.DataFrame, filename: str):
@@ -103,13 +126,50 @@ def general_fields_ui(defaults: dict):
                 compra_puntual=compra_puntual, vice=vice, origen_info=origen_info)
 
 
+def rutas_config_ui():
+    st.subheader("Configuración de rutas por etapa")
+    st.caption("Puedes personalizar las rutas de guardado por etapa. Si usas Streamlit Cloud, usa rutas relativas como ./outputs/I_ETAPA.")
+    ss = st.session_state
+    base_dir_input = st.text_input(
+        "Base de guardado (ACEVAL_BASE_DIR)", value=ss['base_dir'])
+    rutas = get_base_dirs(base_dir_input)
+    use_custom = st.checkbox(
+        "Usar rutas personalizadas por etapa", value=ss.get('use_custom_routes', False))
+    if use_custom:
+        ruta_i = st.text_input("Ruta Etapa I", value=str(
+            ss.get('rutas_salvado', rutas).get('I', rutas['I'])))
+        ruta_ii = st.text_input("Ruta Etapa II", value=str(
+            ss.get('rutas_salvado', rutas).get('II', rutas['II'])))
+        ruta_iii = st.text_input("Ruta Etapa III", value=str(
+            ss.get('rutas_salvado', rutas).get('III', rutas['III'])))
+        ruta_iv = st.text_input("Ruta Etapa IV", value=str(
+            ss.get('rutas_salvado', rutas).get('IV', rutas['IV'])))
+        if st.button("Aplicar rutas"):
+            ss['base_dir'] = base_dir_input
+            ss['use_custom_routes'] = True
+            ss['rutas_salvado'] = {
+                'I': Path(ruta_i),
+                'II': Path(ruta_ii),
+                'III': Path(ruta_iii),
+                'IV': Path(ruta_iv),
+            }
+            # Crea directorios
+            for p in ss['rutas_salvado'].values():
+                Path(p).mkdir(parents=True, exist_ok=True)
+            st.success("Rutas personalizadas aplicadas.")
+    else:
+        if st.button("Usar base y subcarpetas I_ETAPA, II_ETAPA, III_ETAPA, IV_ETAPA"):
+            ss['base_dir'] = base_dir_input
+            ss['use_custom_routes'] = False
+            ss['rutas_salvado'] = get_base_dirs(ss['base_dir'])
+            for p in ss['rutas_salvado'].values():
+                Path(p).mkdir(parents=True, exist_ok=True)
+            st.success("Rutas por defecto aplicadas.")
+    st.info(f"Ruta Etapa I: {ss['rutas_salvado']['I']}\n\nRuta Etapa II: {ss['rutas_salvado']['II']}\n\nRuta Etapa III: {ss['rutas_salvado']['III']}\n\nRuta Etapa IV: {ss['rutas_salvado']['IV']}")
+
+
 def main():
     st.title("ACEVAL - Carga y Procesamiento")
-    # Para Cloud usamos carpeta local relativa
-    default_base_dir = os.getenv("ACEVAL_OUTPUT_DIR", "./outputs")
-    base_dir = st.text_input(
-        "Directorio base para guardar salidas:", value=default_base_dir)
-    rutas_salvado = get_base_dirs(base_dir)
 
     ss = st.session_state
     ss.setdefault('etapa', 1)
@@ -118,6 +178,12 @@ def main():
     ss.setdefault('proveedor', "FORTICA")
     ss.setdefault('empresa', "")
     ss.setdefault('origen_info', "")
+    ss.setdefault('base_dir', get_default_base_dir())
+    ss.setdefault('rutas_salvado', get_base_dirs(ss['base_dir']))
+    ss.setdefault('use_custom_routes', False)
+
+    with st.expander("Configuración de rutas por etapa", expanded=True):
+        rutas_config_ui()
 
     st.markdown("¿Deseas continuar desde una etapa anterior?")
     cont_prev = st.checkbox("Sí, continuar desde una etapa anterior")
@@ -193,18 +259,7 @@ def main():
                             f"Debes confirmar USD=0 en las filas: {', '.join(str(i+1) for i in bad_rows)}")
                     else:
                         try:
-                            items = build_items_from_df(
-                                edited_df, gf['proveedor'], gf['empresa'], gf['factura'], gf['contrato'],
-                                gf['estatus'], gf['numero_pedido'] or None, gf['compra_puntual'] or None,
-                                gf['vice'] or None, int(
-                                    gf['cantidad_productos']) if gf['cantidad_productos'] else None,
-                                gf['origen_info'] or None
-                            )
-                            ss['items'] = items
-                            ss['factura'] = gf['factura']
-                            ss['proveedor'] = gf['proveedor']
-                            ss['empresa'] = gf['empresa']
-                            _ = etapa_i_streamlit(
+                            items, saved_path = etapa_i_streamlit(
                                 df_excel=edited_df,
                                 proveedor=gf['proveedor'],
                                 empresa=gf['empresa'],
@@ -217,11 +272,15 @@ def main():
                                 cantidad_productos=int(
                                     gf['cantidad_productos']) if gf['cantidad_productos'] else None,
                                 origen_info=gf['origen_info'] or None,
-                                rutas_salvado=get_base_dirs(base_dir)
+                                rutas_salvado=ss['rutas_salvado']
                             )
-                            st.success("Guardado en Etapa I.")
-                            to_download_bytes(pd.DataFrame(
-                                items), f"ETAPA_I_{gf['factura']}_{gf['proveedor']}.xlsx")
+                            ss['items'] = items
+                            ss['factura'] = gf['factura']
+                            ss['proveedor'] = gf['proveedor']
+                            ss['empresa'] = gf['empresa']
+                            st.success(f"Guardado en Etapa I: {saved_path}")
+                            to_download_bytes(
+                                pd.DataFrame(items), saved_path.name)
                         except Exception as e:
                             st.error(f"Error al guardar Etapa I: {e}")
             with colB:
@@ -232,18 +291,7 @@ def main():
                             f"Debes confirmar USD=0 en las filas: {', '.join(str(i+1) for i in bad_rows)}")
                     else:
                         try:
-                            items = build_items_from_df(
-                                edited_df, gf['proveedor'], gf['empresa'], gf['factura'], gf['contrato'],
-                                gf['estatus'], gf['numero_pedido'] or None, gf['compra_puntual'] or None,
-                                gf['vice'] or None, int(
-                                    gf['cantidad_productos']) if gf['cantidad_productos'] else None,
-                                gf['origen_info'] or None
-                            )
-                            ss['items'] = items
-                            ss['factura'] = gf['factura']
-                            ss['proveedor'] = gf['proveedor']
-                            ss['empresa'] = gf['empresa']
-                            _ = etapa_i_streamlit(
+                            items, saved_path = etapa_i_streamlit(
                                 df_excel=edited_df,
                                 proveedor=gf['proveedor'],
                                 empresa=gf['empresa'],
@@ -256,10 +304,15 @@ def main():
                                 cantidad_productos=int(
                                     gf['cantidad_productos']) if gf['cantidad_productos'] else None,
                                 origen_info=gf['origen_info'] or None,
-                                rutas_salvado=get_base_dirs(base_dir)
+                                rutas_salvado=ss['rutas_salvado']
                             )
+                            ss['items'] = items
+                            ss['factura'] = gf['factura']
+                            ss['proveedor'] = gf['proveedor']
+                            ss['empresa'] = gf['empresa']
                             ss['etapa'] = 2
-                            st.success("Datos listos. Avanzando a Etapa II...")
+                            st.success(
+                                f"Guardado en Etapa I: {saved_path}. Avanzando a Etapa II...")
                             safe_rerun()
                         except Exception as e:
                             st.error(f"Error al avanzar a Etapa II: {e}")
@@ -330,11 +383,11 @@ def main():
         with colA:
             if st.button("Guardar en Etapa II"):
                 try:
-                    items2 = etapa_ii_streamlit(
+                    items2, saved_path = etapa_ii_streamlit(
                         items=ss['items'],
                         proveedor=ss['proveedor'],
                         factura=ss['factura'],
-                        rutas_salvado=get_base_dirs(base_dir),
+                        rutas_salvado=ss['rutas_salvado'],
                         fecha_pago=fecha_pago,
                         tasa_bcv=tasa_bcv,
                         monto_planilla_tn=monto_planilla_tn,
@@ -342,19 +395,18 @@ def main():
                         monto_celsam=monto_celsam
                     )
                     ss['items'] = items2
-                    st.success("Guardado en Etapa II.")
-                    to_download_bytes(pd.DataFrame(
-                        items2), f"ETAPA_II_{ss['factura']}_{ss['proveedor']}.xlsx")
+                    st.success(f"Guardado en Etapa II: {saved_path}")
+                    to_download_bytes(pd.DataFrame(items2), saved_path.name)
                 except Exception as e:
                     st.error(f"Error al guardar Etapa II: {e}")
         with colB:
             if st.button("Avanzar a Etapa III"):
                 try:
-                    items2 = etapa_ii_streamlit(
+                    items2, saved_path = etapa_ii_streamlit(
                         items=ss['items'],
                         proveedor=ss['proveedor'],
                         factura=ss['factura'],
-                        rutas_salvado=get_base_dirs(base_dir),
+                        rutas_salvado=ss['rutas_salvado'],
                         fecha_pago=fecha_pago,
                         tasa_bcv=tasa_bcv,
                         monto_planilla_tn=monto_planilla_tn,
@@ -363,7 +415,8 @@ def main():
                     )
                     ss['items'] = items2
                     ss['etapa'] = 3
-                    st.success("Avanzando a Etapa III...")
+                    st.success(
+                        f"Guardado en Etapa II: {saved_path}. Avanzando a Etapa III...")
                     safe_rerun()
                 except Exception as e:
                     st.error(f"Error al avanzar a Etapa III: {e}")
@@ -392,61 +445,40 @@ def main():
             cantidad_gandolas = st.number_input(
                 "Cantidad de gandolas", min_value=1, step=1)
 
-        with st.expander("Editar campos generales del pedido"):
-            gf3 = general_fields_ui({
-                'Proveedor': ss.get('proveedor'),
-                'Empresa': ss.get('empresa'),
-                'Contrato': items[0].get('Contrato', ''),
-                'Estatus': items[0].get('Estatus', '1'),
-                'Numero de Pedido Aceval': items[0].get('Numero de Pedido Aceval', ''),
-                'Factura': ss.get('factura'),
-                'Cantidad Productos': items[0].get('Cantidad Productos', 0),
-                'Compra puntual': items[0].get('Compra puntual', ''),
-                'VICE': items[0].get('VICE', ''),
-                'Origen Info': ss.get('origen_info', '')
-            })
-            if st.button("Aplicar a todos los registros (Etapa III)"):
-                ss['items'] = apply_general_fields(
-                    ss['items'], gf3['empresa'], gf3['factura'], gf3['contrato'], gf3['numero_pedido'], gf3['estatus'])
-                ss['proveedor'] = gf3['proveedor']
-                ss['empresa'] = gf3['empresa']
-                ss['factura'] = gf3['factura']
-                st.success("Campos generales aplicados a todos.")
-
         colA, colB = st.columns(2)
         with colA:
             if st.button("Guardar en Etapa III"):
                 try:
-                    items3 = etapa_iii_streamlit(
+                    items3, saved_path = etapa_iii_streamlit(
                         items=items,
                         factura=ss['factura'],
                         proveedor=ss['proveedor'],
-                        rutas_salvado=get_base_dirs(base_dir),
+                        rutas_salvado=ss['rutas_salvado'],
                         fecha_recepcion=fecha_recepcion,
                         df_recibidos=edited_rec,
                         cantidad_gandolas=int(cantidad_gandolas)
                     )
                     ss['items'] = items3
-                    st.success("Guardado en Etapa III.")
-                    to_download_bytes(pd.DataFrame(
-                        items3), f"ETAPA_III_{ss['factura']}_{ss['proveedor']}.xlsx")
+                    st.success(f"Guardado en Etapa III: {saved_path}")
+                    to_download_bytes(pd.DataFrame(items3), saved_path.name)
                 except Exception as e:
                     st.error(f"Error al guardar Etapa III: {e}")
         with colB:
             if st.button("Avanzar a Etapa IV"):
                 try:
-                    items3 = etapa_iii_streamlit(
+                    items3, saved_path = etapa_iii_streamlit(
                         items=items,
                         factura=ss['factura'],
                         proveedor=ss['proveedor'],
-                        rutas_salvado=get_base_dirs(base_dir),
+                        rutas_salvado=ss['rutas_salvado'],
                         fecha_recepcion=fecha_recepcion,
                         df_recibidos=edited_rec,
                         cantidad_gandolas=int(cantidad_gandolas)
                     )
                     ss['items'] = items3
                     ss['etapa'] = 4
-                    st.success("Avanzando a Etapa IV...")
+                    st.success(
+                        f"Guardado en Etapa III: {saved_path}. Avanzando a Etapa IV...")
                     safe_rerun()
                 except Exception as e:
                     st.error(f"Error al avanzar a Etapa IV: {e}")
@@ -466,33 +498,32 @@ def main():
         with colA:
             if st.button("Guardar en Etapa IV"):
                 try:
-                    items4 = etapa_iv_streamlit(
+                    items4, saved_path = etapa_iv_streamlit(
                         items=items,
                         factura=ss['factura'],
                         proveedor=ss['proveedor'],
-                        rutas_salvado=get_base_dirs(base_dir)
+                        rutas_salvado=ss['rutas_salvado']
                     )
                     ss['items'] = items4
-                    st.success("Guardado en Etapa IV.")
+                    st.success(f"Guardado en Etapa IV: {saved_path}")
                     df_final = pd.DataFrame(items4)
-                    to_download_bytes(
-                        df_final, f"IV_ETAPA_{ss['factura']}_{ss['proveedor']}.xlsx")
+                    to_download_bytes(df_final, saved_path.name)
                 except Exception as e:
                     st.error(f"Error al guardar Etapa IV: {e}")
         with colB:
             if st.button("Finalizar proceso (calcular y permitir descarga)"):
                 try:
-                    items4 = etapa_iv_streamlit(
+                    items4, saved_path = etapa_iv_streamlit(
                         items=items,
                         factura=ss['factura'],
                         proveedor=ss['proveedor'],
-                        rutas_salvado=get_base_dirs(base_dir)
+                        rutas_salvado=ss['rutas_salvado']
                     )
                     ss['items'] = items4
-                    st.success("Proceso completado. Descarga el archivo.")
+                    st.success(
+                        f"Proceso completado. Archivo: {saved_path}. Descárgalo a continuación.")
                     df_final = pd.DataFrame(items4)
-                    to_download_bytes(
-                        df_final, f"IV_ETAPA_{ss['factura']}_{ss['proveedor']}.xlsx")
+                    to_download_bytes(df_final, saved_path.name)
                 except Exception as e:
                     st.error(f"Error al finalizar: {e}")
 
