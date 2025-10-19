@@ -1,0 +1,20 @@
+# Entornos
+.venv/
+venv/
+.env
+
+# Caché / compilados
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.DS_Store
+
+# Datos locales (no subir datos reales)
+*.csv
+*.xlsx
+*.xls
+*.parquet
+
+# Streamlit
+.streamlit/secrets.toml
